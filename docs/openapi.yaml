@@ -1,0 +1,421 @@
+openapi: 3.0.3
+info:
+  title: Todo API
+  version: "1.0.0"
+  description: |
+    Rails API-only εφαρμογή για διαχείριση λιστών εκκρεμοτήτων (Todos) και στοιχείων (Todo Items), με JWT authentication.
+    - Auth: POST /auth/login → token (JWT), GET /auth/logout → revoke
+    - Protected: Όλα τα /todos* και /todos/{todo_id}/items* απαιτούν Authorization: Bearer <token>
+servers:
+  - url: http://localhost:3000
+tags:
+  - name: Auth
+  - name: Users
+  - name: Todos
+  - name: Items
+paths:
+  /signup:
+    post:
+      tags: [Users]
+      summary: Signup (δημιουργία χρήστη)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+            examples:
+              default:
+                value:
+                  user:
+                    email: "me@example.com"
+                    password: "pass1234"
+                    password_confirmation: "pass1234"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              examples:
+                created:
+                  value: { id: 1, email: "me@example.com" }
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login (λήψη JWT token)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              default:
+                value: { email: "me@example.com", password: "pass1234" }
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              examples:
+                ok:
+                  value: { token: "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjox..." }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/logout:
+    get:
+      tags: [Auth]
+      summary: Logout (revoke τρέχον token)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: "Logged out" }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /todos:
+    get:
+      tags: [Todos]
+      summary: List all todos (με τα items τους)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK (array από todos με ενσωματωμένα items)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TodoWithItems' }
+              examples:
+                empty:
+                  value: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Todos]
+      summary: Create a new todo
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoCreateRequest'
+            examples:
+              default:
+                value: { todo: { title: "Groceries" } }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Todo' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /todos/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+        description: Todo ID
+    get:
+      tags: [Todos]
+      summary: Get a todo (με τα items του)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TodoWithItems' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Todos]
+      summary: Update a todo
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TodoUpdateRequest' }
+            examples:
+              default:
+                value: { todo: { title: "Saturday Shopping" } }
+      responses:
+        '200':
+          description: OK (επιστρέφει το ενημερωμένο Todo)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Todo' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Todos]
+      summary: Delete a todo και τα items του
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: No Content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /todos/{todo_id}/items:
+    parameters:
+      - in: path
+        name: todo_id
+        required: true
+        schema: { type: integer }
+        description: Parent Todo ID
+    post:
+      tags: [Items]
+      summary: Create a new todo item
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TodoItemCreateRequest' }
+            examples:
+              default:
+                value: { item: { name: "Milk", done: false } }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TodoItem' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /todos/{todo_id}/items/{iid}:
+    parameters:
+      - in: path
+        name: todo_id
+        required: true
+        schema: { type: integer }
+        description: Parent Todo ID
+      - in: path
+        name: iid
+        required: true
+        schema: { type: integer }
+        description: Todo Item ID (iid)
+    get:
+      tags: [Items]
+      summary: Get a todo item
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TodoItem' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Items]
+      summary: Update a todo item
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TodoItemUpdateRequest' }
+            examples:
+              default:
+                value: { item: { done: true } }
+      responses:
+        '200':
+          description: OK (επιστρέφει το ενημερωμένο item)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TodoItem' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Items]
+      summary: Delete a todo item
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: No Content
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            missing:
+              value: { error: "Missing token" }
+            invalid:
+              value: { error: "Invalid token" }
+            revoked:
+              value: { error: "Token expired or revoked" }
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            example:
+              value: { error: "Couldn't find Record" }
+    UnprocessableEntity:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationErrorResponse' }
+          examples:
+            example:
+              value: { errors: ["Title can't be blank"] }
+  schemas:
+    SignupRequest:
+      type: object
+      required: [user]
+      properties:
+        user:
+          type: object
+          required: [email, password, password_confirmation]
+          properties:
+            email: { type: string, format: email }
+            password: { type: string, minLength: 6 }
+            password_confirmation: { type: string, minLength: 6 }
+    UserResponse:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        email: { type: string, format: email, example: "me@example.com" }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    TokenResponse:
+      type: object
+      properties:
+        token: { type: string, description: JWT token }
+    Todo:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        title: { type: string, example: "Groceries" }
+        user_id: { type: integer, example: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TodoWithItems:
+      allOf:
+        - $ref: '#/components/schemas/Todo'
+        - type: object
+          properties:
+            todo_items:
+              type: array
+              items: { $ref: '#/components/schemas/TodoItem' }
+    TodoCreateRequest:
+      type: object
+      required: [todo]
+      properties:
+        todo:
+          type: object
+          required: [title]
+          properties:
+            title: { type: string, example: "Groceries" }
+    TodoUpdateRequest:
+      type: object
+      required: [todo]
+      properties:
+        todo:
+          type: object
+          properties:
+            title: { type: string, example: "Saturday Shopping" }
+    TodoItem:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        name: { type: string, example: "Milk" }
+        done: { type: boolean, example: false }
+        todo_id: { type: integer, example: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TodoItemCreateRequest:
+      type: object
+      required: [item]
+      properties:
+        item:
+          type: object
+          required: [name]
+          properties:
+            name: { type: string, example: "Milk" }
+            done: { type: boolean, example: false }
+    TodoItemUpdateRequest:
+      type: object
+      required: [item]
+      properties:
+        item:
+          type: object
+          properties:
+            name: { type: string, example: "Milk" }
+            done: { type: boolean, example: true }
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string, example: "Invalid token" }
+    ValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items: { type: string }
+          example: ["Title can't be blank"]
+security:
+  - bearerAuth: []
